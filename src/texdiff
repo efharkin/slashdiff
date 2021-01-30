@@ -37,11 +37,13 @@ def main():
         # Write output
         if args.standalone:
             header_text = load_header()
-            output = (
-                header_text
-                + r'\n\begin{document}'
-                + highlighted
-                + r'\n\end{document}'
+            output = '\n'.join(
+                [
+                    header_text,
+                    r'\begin{document}',
+                    highlighted,
+                    r'\end{document}',
+                ]
             )
         else:
             output = highlighted
