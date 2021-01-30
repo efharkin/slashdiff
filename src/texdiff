@@ -1,87 +1,109 @@
 #!/usr/bin/env python3
 import argparse
-import re
 import os
 import tempfile
 
-parser = argparse.ArgumentParser()
-parser.add_argument('oldversion')
-parser.add_argument('newversion')
-
-args = parser.parse_args()
-
-def flatten_paragraphs(input_file, output_file):
-    blank_line_pattern = re.compile('^\s*$')
-    begin_doc_pattern = re.compile(r'\\begin{document}')
-    end_doc_pattern = re.compile(r'\\end{document}')
-
-    with open(input_file, 'r') as f:
-        paragraphs = []
-        this_paragraph = []
-        for line in f.readlines():
-            if not blank_line_pattern.search(line):
-                this_paragraph.append(line.strip())
-
-                if begin_doc_pattern.search(line):
-                    paragraphs = []
-                    this_paragraph = []
-                elif end_doc_pattern.search(line):
-                    paragraphs.append(' '.join(this_paragraph[:-1]))
-                    break
-            else:
-                # End of paragraph
-                paragraphs.append(' '.join(this_paragraph))
-                this_paragraph = []
-
-        f.close()
-
-    with open(output_file, 'w') as f:
-        f.write('\n\n'.join(paragraphs))
-        f.close()
+from manipulation import highlight_changes, flatten_paragraphs
 
 
-def highlight_additions(string, highlight_colour='green'):
-    start_pattern = r'{\+'
-    end_pattern = r'\+}'
-    start_highlight_cmd = r'\\textcolor{' + highlight_colour + r'}{'
-    end_highlight_cmd = '}'
-    return sub_and_enclose(
-        start_pattern,
-        start_highlight_cmd,
-        end_pattern,
-        end_highlight_cmd,
-        string,
+def main():
+    parse_commandline_args()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Simplify the structure of LaTeX source files to make them more
+        # machine-readable.
+        flatten_paragraphs(args.oldversion, os.path.join(tmpdir, 'oldversion'))
+        flatten_paragraphs(args.newversion, os.path.join(tmpdir, 'newversion'))
+
+        # Use git diff to find changes from one version to the next.
+        # The --word-diff option shows changes to individual words and phrases.
+        # The -U option includes a huge amount of context around every change;
+        # as long as there are fewer lines between changes than this, the whole
+        # document will be rendered as one hunk in the diff.
+        os.system(
+            'git diff --word-diff --no-index -U9000 '
+            f'{tmpdir}/oldversion {tmpdir}/newversion '
+            f'| tail -n +6 > {tmpdir}/diff'
+        )
+        with open(f'{tmpdir}/diff', 'r') as f:
+            diff_output = ''.join(f.readlines())
+            f.close()
+
+        # Highlight changes in diff output.
+        highlighted = highlight_changes(
+            diff_output, args.addition_colour, args.deletion_colour
+        )
+
+        # Write output
+        if args.standalone:
+            header_text = load_header()
+            output = (
+                header_text
+                + r'\n\begin{document}'
+                + highlighted
+                + r'\n\end{document}'
+            )
+        else:
+            output = highlighted
+
+        with open(args.output, 'w') as f:
+            f.write(output)
+            f.close()
+
+
+def parse_commandline_args():
+    global args
+
+    parser = argparse.ArgumentParser(
+        'texdiff', description='Pretty track-changes for LaTeX documents.'
+    )
+    parser.add_argument('oldversion')
+    parser.add_argument('newversion')
+    parser.add_argument(
+        '-o', '--output', type=str, required=True, help='Path to output file.'
+    )
+    parser.add_argument(
+        '-s',
+        '--standalone',
+        action='store_true',
+        help='Produce LaTeX output that can be used directly to produce a PDF. '
+        'Prepends a minimal header to the document body.',
+    )
+    parser.add_argument(
+        '--header',
+        type=str,
+        default='default',
+        help='Path to custom header file for standalone output.',
+    )
+    parser.add_argument(
+        '--addition-colour', default='green', help='Colour of added text.'
+    )
+    parser.add_argument(
+        '--deletion-colour', default='red', help='Colour of removed text.'
     )
 
-def highlight_deletions(string, highlight_colour='red'):
-    return sub_and_enclose(
-        r'\[\-',
-        r'\\textcolor{' + highlight_colour + r'}{\\st{',
-        r'\-\]',
-        r'}}',
-        string,
-    )
+    args = parser.parse_args()
 
-def sub_and_enclose(start_pattern, start_sub, end_pattern, end_sub, string):
-    return re.sub(end_pattern, end_sub, re.sub(start_pattern, start_sub, string))
 
-with tempfile.TemporaryDirectory() as tmpdir:
-    flatten_paragraphs(args.oldversion, os.path.join(tmpdir, 'oldversion'))
-    flatten_paragraphs(args.newversion, os.path.join(tmpdir, 'newversion'))
-    os.system(
-        'git diff --word-diff --no-index -U5000 '
-        f'{tmpdir}/oldversion {tmpdir}/newversion '
-        '| tail -n +6 > mydiff'
-    )
+def load_header():
+    """Load a LaTeX header for standalone output."""
+    if args.header == 'default':
+        header_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'default_header.tex'
+        )
+    else:
+        if not os.path.exists(args.header):
+            raise ValueError(
+                f'The custom header file {args.header} could not be found.'
+            )
+        else:
+            header_path = args.header
 
-with open('mydiff', 'r') as f:
-    diff_output = f.readlines()
+    with open(header_path, 'r') as f:
+        header_text = ''.join(f.readlines())
 
-newlines = []
-for line in diff_output:
-    newlines.append(highlight_deletions(highlight_additions(line)))
+    return header_text
 
-with open('mycoloreddiff', 'w') as f:
-    f.write(''.join(newlines))
-    f.close()
 
+if __name__ == '__main__':
+    main()
