@@ -57,7 +57,7 @@ def parse_commandline_args():
     global args
 
     parser = argparse.ArgumentParser(
-        'texdiff', description='Pretty track-changes for LaTeX documents.'
+        'latexdiff', description='Pretty track-changes for LaTeX documents.'
     )
     parser.add_argument('oldversion')
     parser.add_argument('newversion')
@@ -91,7 +91,7 @@ def load_header():
     """Load a LaTeX header for standalone output."""
     if args.header == 'default':
         header_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), 'default_header.tex'
+            os.path.dirname(os.path.realpath(__file__)), 'default_header.tex'
         )
     else:
         if not os.path.exists(args.header):
