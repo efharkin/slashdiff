@@ -57,7 +57,7 @@ def parse_commandline_args():
     global args
 
     parser = argparse.ArgumentParser(
-        'latexdiff', description='Pretty track-changes for LaTeX documents.'
+        'slashdiff', description='Pretty track-changes for LaTeX documents.'
     )
     parser.add_argument('oldversion')
     parser.add_argument('newversion')

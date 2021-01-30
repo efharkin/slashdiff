@@ -1,5 +1,5 @@
 #!/bin/sh
-# Simple uninstall for latexdiff.
+# Simple uninstall for slashdiff.
 
 # Remove link in /usr/local/bin
-rm /usr/local/bin/latexdiff
+rm /usr/local/bin/slashdiff
